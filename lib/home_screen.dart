@@ -1,13 +1,31 @@
-// home_screen.dart
-
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <-- 1. Import Firestore
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-// --- Data Model (No changes) ---
+// -----------------------------------------------------------
+// --- Local notification setup ---
+// -----------------------------------------------------------
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+Future<void> initializeLocalNotifications() async {
+  const AndroidInitializationSettings androidSettings =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const InitializationSettings initSettings =
+      InitializationSettings(android: androidSettings);
+
+  await flutterLocalNotificationsPlugin.initialize(initSettings);
+}
+
+// -----------------------------------------------------------
+// --- Data Model ---
+// -----------------------------------------------------------
 class Conversation {
   final String name;
   final String lastMessage;
-  final String time; // We'll use a string for now
+  final String time;
   final int unreadCount;
 
   Conversation({
@@ -17,32 +35,75 @@ class Conversation {
     this.unreadCount = 0,
   });
 
-  // 2. ADDED: Factory constructor to create a Conversation from a Firestore document
   factory Conversation.fromFirestore(DocumentSnapshot doc) {
     Map data = doc.data() as Map<String, dynamic>;
-    
-    // Note: You must adjust these field names ('chatName', 'lastMessage', etc.)
-    // to match the exact field names in your Firestore 'chats' collection.
-    
-    // Convert Firestore Timestamp to a simple string (e.g., "10:30 AM")
-    String formattedTime = '...'; // Default
-    if (data['lastMessageTimestamp'] != null) {
-      Timestamp ts = data['lastMessageTimestamp'] as Timestamp;
+
+    String formattedTime = '...';
+    if (data['timestamp'] != null) {
+      Timestamp ts = data['timestamp'] as Timestamp;
       DateTime dt = ts.toDate();
-      formattedTime = '${dt.hour}:${dt.minute.toString().padLeft(2, '0')}'; // Simple time
+      formattedTime = '${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
     }
 
     return Conversation(
-      name: data['chatName'] ?? 'Unknown Chat',
-      lastMessage: data['lastMessage'] ?? 'No messages yet',
+      name: data['senderName'] ?? 'Admin',
+      lastMessage: data['message'] ?? 'No message',
       time: formattedTime,
-      unreadCount: data['unreadCount'] ?? 0,
+      unreadCount: 0,
     );
   }
 }
 
-// --- WhatsAppHome Widget (No changes) ---
-class WhatsAppHome extends StatelessWidget {
+// -----------------------------------------------------------
+// --- Main Home Screen ---
+// -----------------------------------------------------------
+class WhatsAppHome extends StatefulWidget {
+  const WhatsAppHome({super.key});
+
+  @override
+  State<WhatsAppHome> createState() => _WhatsAppHomeState();
+}
+
+class _WhatsAppHomeState extends State<WhatsAppHome> {
+  @override
+  void initState() {
+    super.initState();
+    _setupNotifications();
+  }
+
+  Future<void> _setupNotifications() async {
+    await initializeLocalNotifications();
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      if (message.notification != null) {
+        await _showLocalNotification(
+          message.notification!.title ?? 'New Message',
+          message.notification!.body ?? '',
+        );
+      }
+    });
+  }
+
+  Future<void> _showLocalNotification(String title, String body) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'admin_messages',
+      'Admin Messages',
+      channelDescription: 'Shows notifications from the admin',
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+    );
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      title,
+      body,
+      details,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -63,7 +124,7 @@ class WhatsAppHome extends StatelessWidget {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             tabs: [
-              Tab(text: 'CHATS'),
+              Tab(text: 'MESSAGES'),
               Tab(text: 'STATUS'),
               Tab(text: 'CALLS'),
             ],
@@ -71,16 +132,14 @@ class WhatsAppHome extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            MessageList(), // <--- This is now a real-time list
+            MessageList(), // Real-time admin messages
             const Center(child: Text('Status updates appear here!')),
             const Center(child: Text('Your call history appears here!')),
           ],
         ),
         floatingActionButton: FloatingActionButton(
           backgroundColor: const Color.fromARGB(255, 37, 112, 211),
-          onPressed: () {
-            // TODO: Action to start a new chat
-          },
+          onPressed: () {},
           child: const Icon(Icons.message, color: Colors.white),
         ),
       ),
@@ -89,30 +148,19 @@ class WhatsAppHome extends StatelessWidget {
 }
 
 // -----------------------------------------------------------
-// --- 3. UPDATED: MessageList is now a StatefulWidget ---
+// --- MessageList (admin messages in real-time) ---
 // -----------------------------------------------------------
-
-class MessageList extends StatefulWidget {
-  @override
-  _MessageListState createState() => _MessageListState();
-}
-
-class _MessageListState extends State<MessageList> {
-  // 4. Define the stream from Firestore
-  // This listens to the 'chats' collection, ordered by the latest message
-  final Stream<QuerySnapshot> _chatsStream = FirebaseFirestore.instance
-      .collection('chats')
-      // .orderBy('lastMessageTimestamp', descending: true) // Use this to sort chats
+class MessageList extends StatelessWidget {
+  final Stream<QuerySnapshot> _adminMessagesStream = FirebaseFirestore.instance
+      .collection('adminMessages')
+      .orderBy('timestamp', descending: true)
       .snapshots();
 
   @override
   Widget build(BuildContext context) {
-    // 5. Use a StreamBuilder to build the list
     return StreamBuilder<QuerySnapshot>(
-      stream: _chatsStream,
+      stream: _adminMessagesStream,
       builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
-        
-        // --- Handle Loading and Error States ---
         if (snapshot.hasError) {
           return const Center(child: Text('Something went wrong'));
         }
@@ -120,66 +168,28 @@ class _MessageListState extends State<MessageList> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('Start a new chat!'));
+          return const Center(child: Text('No messages yet'));
         }
 
-        // --- Build the list if we have data ---
         return ListView(
           children: snapshot.data!.docs.map((DocumentSnapshot document) {
-            // 6. Convert each Firestore document into a Conversation object
             Conversation chat = Conversation.fromFirestore(document);
 
-            // 7. Build the ListTile using the dynamic data
             return Column(
               children: [
                 ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.grey,
-                    radius: 28,
-                    child: Text(chat.name[0], style: const TextStyle(color: Colors.white)),
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.blue,
+                    radius: 25,
+                    child: Icon(Icons.admin_panel_settings, color: Colors.white),
                   ),
-                  title: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(chat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(
-                        chat.time,
-                        style: TextStyle(
-                          fontSize: 12.0,
-                          color: chat.unreadCount > 0 ? const Color.fromARGB(255, 37, 106, 211) : Colors.grey,
-                        ),
-                      ),
-                    ],
+                  title: Text(
+                    chat.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      chat.lastMessage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                  trailing: chat.unreadCount > 0
-                      ? Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            color: Color.fromARGB(255, 37, 92, 211),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${chat.unreadCount}',
-                              style: const TextStyle(color: Colors.white, fontSize: 10),
-                            ),
-                          ),
-                        )
-                      : null,
-                  onTap: () {
-                    // TODO: Navigate to the individual Chat Screen
-                    print('Tapped on chat: ${chat.name}');
-                  },
+                  subtitle: Text(chat.lastMessage),
+                  trailing: Text(chat.time,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ),
                 const Divider(height: 1, indent: 80),
               ],

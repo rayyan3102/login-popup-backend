@@ -24,7 +24,7 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  _showNotification(message);
+  await _showNotification(message);
   print("📩 Background message: ${message.notification?.title}");
 }
 
@@ -83,7 +83,7 @@ Future<void> sendDeviceTokenToServer(String userId) async {
     print('🔥 Device Token: $token');
 
     final res = await http.post(
-      Uri.parse('https://login-popup-backend.onrender.com//register-token'),
+      Uri.parse('https://login-popup-backend.onrender.com/register-token'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'token': token, 'userId': userId}),
     );
@@ -96,7 +96,7 @@ Future<void> sendDeviceTokenToServer(String userId) async {
 
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       await http.post(
-        Uri.parse('https://login-popup-backend.onrender.com//register-token'),
+        Uri.parse('https://login-popup-backend.onrender.com/register-token'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'token': newToken, 'userId': userId}),
       );
@@ -123,13 +123,17 @@ Future<void> main() async {
     sound: true,
   );
 
-  // 🔔 Listen for foreground notifications
+  // ✅ Subscribe all users to admin topic
+  await FirebaseMessaging.instance.subscribeToTopic('all-users');
+  print('✅ Subscribed to FCM topic: all-users');
+
+  // 🔔 Foreground listener
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     print('📲 Foreground message: ${message.notification?.title}');
     _showNotification(message);
   });
 
-  // When user taps notification (app opened from background)
+  // 📬 When app opened from notification
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     print('📬 App opened from notification: ${message.notification?.title}');
   });

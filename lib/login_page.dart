@@ -9,8 +9,11 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import 'popup_page.dart';
-import 'main.dart'; // where flutterLocalNotificationsPlugin is initialized
-import 'home_screen.dart'; // <-- The new home screen
+import 'home_screen.dart';
+
+// ✅ Move this plugin initialization inside this file to fix "not found" error
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -20,23 +23,35 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // 1. ADDED: Key for Form Validation
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers for text fields
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
 
-  // State variables
   bool isLogin = true;
-  bool _isLoading = false; // 2. ADDED: Loading state for button
+  bool _isLoading = false;
 
-  // Firebase instances
   final auth = FirebaseAuth.instance;
   final firestore = FirebaseFirestore.instance;
 
-  // 3. ADDED: Dispose controllers
+  @override
+  void initState() {
+    super.initState();
+    _initializeNotifications();
+  }
+
+  // ✅ Initialize notification plugin once
+  Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -46,13 +61,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _submit() async {
-    // 4. ADDED: Validate form
-    if (!_formKey.currentState!.validate()) {
-      return; // If form is invalid, do nothing
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
-      _isLoading = true; // Show loading spinner
+      _isLoading = true;
     });
 
     final email = _emailController.text.trim();
@@ -66,13 +78,11 @@ class _LoginPageState extends State<LoginPage> {
           password: password,
         );
 
-        // Get FCM token
         final fcmToken = await FirebaseMessaging.instance.getToken();
         print('🔥 FCM Token: $fcmToken');
 
-        // Send token to backend
         await http.post(
-          Uri.parse('https://login-popup-backend.onrender.com//register-token'),
+          Uri.parse('https://login-popup-backend.onrender.com/register-token'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'uid': userCredential.user!.uid,
@@ -81,7 +91,6 @@ class _LoginPageState extends State<LoginPage> {
           }),
         );
 
-        // Local notification
         await flutterLocalNotificationsPlugin.show(
           0,
           'Login Successful',
@@ -106,12 +115,10 @@ class _LoginPageState extends State<LoginPage> {
           'email': email,
         });
 
-        // Get FCM token
         final fcmToken = await FirebaseMessaging.instance.getToken();
 
-        // Send token to backend
         await http.post(
-          Uri.parse('https://login-popup-backend.onrender.com//register-token'),
+          Uri.parse('https://login-popup-backend.onrender.com/register-token'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'uid': userCredential.user!.uid,
@@ -120,7 +127,6 @@ class _LoginPageState extends State<LoginPage> {
           }),
         );
 
-        // Local notification
         await flutterLocalNotificationsPlugin.show(
           0,
           'Registration Successful',
@@ -136,9 +142,6 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
 
-      // --- COMMON LOGIC (After Login or Register) ---
-
-      // Fetch user data
       final userDoc =
           await firestore.collection('users').doc(auth.currentUser!.uid).get();
       final userData = userDoc.data();
@@ -152,7 +155,6 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 5. UPDATED: Await the pop-up
       await showDialog(
         context: context,
         builder: (_) => PopupPage(userData: userData),
@@ -160,17 +162,14 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      // 6. ADDED: Navigate to Home Screen after pop-up closes
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => WhatsAppHome()),
       );
-
     } catch (e) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
-      // 7. ADDED: Always stop loading state
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -185,17 +184,14 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         title: Text(isLogin ? 'Login' : 'Register'),
       ),
-      // 8. ADDED: SingleChildScrollView to prevent keyboard overflow
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        // 9. ADDED: Form widget for validation
         child: Form(
-          key: _formKey, // Attach form key
+          key: _formKey,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (!isLogin)
-                // 10. CHANGED: to TextFormField
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -206,7 +202,6 @@ class _LoginPageState extends State<LoginPage> {
                       value!.isEmpty ? 'Please enter your name' : null,
                 ),
               const SizedBox(height: 16),
-              // 10. CHANGED: to TextFormField
               TextFormField(
                 controller: _emailController,
                 decoration: const InputDecoration(
@@ -222,7 +217,6 @@ class _LoginPageState extends State<LoginPage> {
                 },
               ),
               const SizedBox(height: 16),
-              // 10. CHANGED: to TextFormField
               TextFormField(
                 controller: _passwordController,
                 decoration: const InputDecoration(
@@ -240,12 +234,10 @@ class _LoginPageState extends State<LoginPage> {
                 },
               ),
               const SizedBox(height: 24),
-              // 11. UPDATED: ElevatedButton for loading state
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  // Disable button when loading, or call _submit
                   onPressed: _isLoading ? null : _submit,
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
@@ -253,12 +245,13 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               TextButton(
-                // Disable button when loading
-                onPressed: _isLoading ? null : () {
-                  setState(() {
-                    isLogin = !isLogin;
-                  });
-                },
+                onPressed: _isLoading
+                    ? null
+                    : () {
+                        setState(() {
+                          isLogin = !isLogin;
+                        });
+                      },
                 child: Text(
                   isLogin ? 'Create an account' : 'Already have an account?',
                 ),
