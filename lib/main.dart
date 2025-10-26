@@ -83,7 +83,7 @@ Future<void> sendDeviceTokenToServer(String userId) async {
     print('🔥 Device Token: $token');
 
     final res = await http.post(
-      Uri.parse('http://192.168.18.104:3000/register-token'),
+      Uri.parse('https://login-popup-backend.onrender.com//register-token'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'token': token, 'userId': userId}),
     );
@@ -96,7 +96,7 @@ Future<void> sendDeviceTokenToServer(String userId) async {
 
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
       await http.post(
-        Uri.parse('http://192.168.18.104:3000/register-token'),
+        Uri.parse('https://login-popup-backend.onrender.com//register-token'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'token': newToken, 'userId': userId}),
       );

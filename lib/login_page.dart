@@ -72,7 +72,7 @@ class _LoginPageState extends State<LoginPage> {
 
         // Send token to backend
         await http.post(
-          Uri.parse('http://192.168.18.104:3000/register-token'),
+          Uri.parse('https://login-popup-backend.onrender.com//register-token'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'uid': userCredential.user!.uid,
@@ -111,7 +111,7 @@ class _LoginPageState extends State<LoginPage> {
 
         // Send token to backend
         await http.post(
-          Uri.parse('http://192.168.18.104:3000/register-token'),
+          Uri.parse('https://login-popup-backend.onrender.com//register-token'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'uid': userCredential.user!.uid,
