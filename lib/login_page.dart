@@ -1,5 +1,3 @@
-// login_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,10 +6,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-import 'popup_page.dart';
-import 'home_screen.dart';
+// --- THESE IMPORTS ARE NO LONGER NEEDED IN THIS FILE ---
+// import 'popup_page.dart';
+// import 'home_screen.dart'; 
 
-// ✅ Move this plugin initialization inside this file to fix "not found" error
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
@@ -41,7 +39,6 @@ class _LoginPageState extends State<LoginPage> {
     _initializeNotifications();
   }
 
-  // ✅ Initialize notification plugin once
   Future<void> _initializeNotifications() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -60,6 +57,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // --- THIS IS THE ONLY FUNCTION THAT HAS CHANGED ---
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -71,9 +69,11 @@ class _LoginPageState extends State<LoginPage> {
     final password = _passwordController.text.trim();
 
     try {
+      UserCredential userCredential; // Declare here to use in both blocks
+
       if (isLogin) {
         // --- LOGIN ---
-        final userCredential = await auth.signInWithEmailAndPassword(
+        userCredential = await auth.signInWithEmailAndPassword(
           email: email,
           password: password,
         );
@@ -81,6 +81,7 @@ class _LoginPageState extends State<LoginPage> {
         final fcmToken = await FirebaseMessaging.instance.getToken();
         print('🔥 FCM Token: $fcmToken');
 
+        // Send the token (this is great, keep it!)
         await http.post(
           Uri.parse('https://login-popup-backend.onrender.com/register-token'),
           headers: {'Content-Type': 'application/json'},
@@ -91,6 +92,7 @@ class _LoginPageState extends State<LoginPage> {
           }),
         );
 
+        // Show a local notification (this is fine!)
         await flutterLocalNotificationsPlugin.show(
           0,
           'Login Successful',
@@ -106,7 +108,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       } else {
         // --- REGISTER ---
-        final userCredential = await auth.createUserWithEmailAndPassword(
+        userCredential = await auth.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
@@ -117,6 +119,7 @@ class _LoginPageState extends State<LoginPage> {
 
         final fcmToken = await FirebaseMessaging.instance.getToken();
 
+        // Send the token
         await http.post(
           Uri.parse('https://login-popup-backend.onrender.com/register-token'),
           headers: {'Content-Type': 'application/json'},
@@ -127,6 +130,7 @@ class _LoginPageState extends State<LoginPage> {
           }),
         );
 
+        // Show a local notification
         await flutterLocalNotificationsPlugin.show(
           0,
           'Registration Successful',
@@ -142,33 +146,21 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
 
-      final userDoc =
-          await firestore.collection('users').doc(auth.currentUser!.uid).get();
-      final userData = userDoc.data();
+      // --- ALL LOGIC AFTER THIS POINT IS REMOVED ---
+      
+      // We do NOT fetch user data here.
+      // We do NOT show a PopupPage here.
+      // We do NOT navigate here.
 
-      if (!mounted) return;
+      // The StreamBuilder in main.dart is now handling all navigation.
+      // As soon as this 'try' block finishes, the StreamBuilder
+      // will see the new user and automatically switch to WhatsAppHome.
 
-      if (userData == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User data not found!')),
-        );
-        return;
-      }
-
-      await showDialog(
-        context: context,
-        builder: (_) => PopupPage(userData: userData),
-      );
-
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => WhatsAppHome()),
-      );
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -178,6 +170,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // --- Build method is unchanged ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(

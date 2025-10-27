@@ -31,24 +31,29 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// ✅ Register token and save to Firestore
+// ✅ Register token and save to Firestore (This is the updated version)
 app.post("/register-token", async (req, res) => {
   try {
-    const { userId, token } = req.body;
-    if (!userId || !token) {
-      return res.status(400).json({ error: "userId and token are required" });
+    // 1. Look for 'uid', 'email', and 'token' (matching login_page.dart)
+    const { uid, email, token } = req.body; 
+    
+    // 2. Validate using 'uid'
+    if (!uid || !token) { 
+      return res.status(400).json({ error: "uid and token are required" });
     }
 
-    // Save token to Firestore
-    await db.collection("deviceTokens").doc(userId).set(
+    // 3. Save token and email to Firestore, using 'uid' as the doc ID
+    await db.collection("deviceTokens").doc(uid).set( 
       {
         token,
+        email: email || null, // Save the email (or null if not provided)
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
 
-    console.log(`✅ Token registered for user ${userId}: ${token}`);
+    // 4. Log using 'uid'
+    console.log(`✅ Token registered for user ${uid}: ${token}`); 
     res.json({ success: true });
   } catch (err) {
     console.error("❌ Error saving token:", err);
@@ -89,7 +94,7 @@ app.post("/admin/send", async (req, res) => {
       },
       apns: {
         payload: { aps: { sound: "default" } },
-      },
+      }, // <-- ERROR 1 (asterisk) REMOVED
     };
 
     // Send to all tokens
@@ -104,9 +109,9 @@ app.post("/admin/send", async (req, res) => {
     await db.collection("adminMessages").add({
       senderName: "Admin",
       message,
-      title,
+      title, // You can decide if you want to save the title
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    }); // <-- ERROR 2 (stray 'á') REMOVED
 
     res.json({
       success: true,
